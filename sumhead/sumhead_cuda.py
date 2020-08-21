@@ -436,16 +436,19 @@ def gpx(rng, population, offspring, graph, crossovered, color_count, color_count
 
 
 if __name__ == "__main__":
-    instance = DIMACS("graph_coloring/dimacs_instances/DSJC250.5.col")
+    instance = DIMACS("graph_coloring/dimacs_instances/DSJC125.5.col")
+    
+    # distance mean / min / mean / max
 
+    stats = np.zeros((26, 4), dtype=np.float32)
     # HYPERPARAMETERS
     vertex_count = instance.vertex_count
-    k = 25
-    pop_size = 16800
+    k = 20
+    pop_size = 8192
 
     # CUDA
-    threads_per_block = 300
-    blocks = 56
+    threads_per_block = 256
+    blocks = 32
     rng = create_xoroshiro128p_states(threads_per_block * blocks, seed=1)
 
     # gamma matrix for tabucol and tabusum
@@ -473,7 +476,7 @@ if __name__ == "__main__":
     k_final = np.empty(pop_size)
 
     # Logging
-    logging.basicConfig(level=logging.INFO, filename="ouput_sumhead_cuda_0.log")
+    logging.basicConfig(level=logging.INFO, filename="sumhead_cuda_stats.log")
 
     # Solution
     best_score = np.inf
@@ -485,18 +488,19 @@ if __name__ == "__main__":
         np.inf for p in population
     ])
 
-    for e in range(100):
+    for e in range(25):
         print(f"iteration {e}")
 
         start = time()
         # compute distances between solution for gpx
         print(f"DISTANCES")
         distance[blocks, threads_per_block](population, pop_size, vertex_count, distances_gpx, solution_per_thread)
+        stats[e, 0] = distances_gpx.mean()
         print(f"\tmean distances : {distances_gpx.mean()}")
         print(f"\tdistance duration : {time() - start}")
 
         begin = 0
-        end = 2048
+        end = 128
 
         # knn
         knn = np.argsort(distances_gpx)[:, begin:end]
@@ -525,6 +529,7 @@ if __name__ == "__main__":
         print(f"\tmean : {offspring_conflict.mean()} -> {remaining_conliftcs.mean()}")
         print(f"\tmax : {offspring_conflict.max()} -> {remaining_conliftcs.max()}")
         print(f"\ttabucol duration : {time() - start}")
+     
 
         # REMOVE REMAINING CONFLICTS
         print(f"CONFLICTS")
@@ -552,6 +557,12 @@ if __name__ == "__main__":
         print(f"\tmin : {f_solution_output.min()}")
         print(f"\tmean : {f_solution_output.mean()}")
         print(f"\tmax : {f_solution_output.max()}")
+
+        stats[e, 1] = f_solution_output.min()
+        stats[e, 2] = f_solution_output.mean()
+        stats[e, 3] = f_solution_output.max()
+
+        np.savetxt("stats_sumhead_8192_5.csv", stats, delimiter=",")   
 
         # update best solution
         best_id = f_solution_output.argmin()
